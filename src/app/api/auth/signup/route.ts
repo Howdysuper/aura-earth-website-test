@@ -1,4 +1,5 @@
 import { signup, setSessionCookie } from "@/lib/auth";
+import { isAdminConfigured, getAdminAuth } from "@/lib/firebase-admin";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -16,18 +17,29 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: { uid?: string; email?: string; fullName?: string; token?: string };
+  let body: { token?: string; email?: string; fullName?: string };
   try {
     body = await request.json();
   } catch {
     return Response.json({ ok: false, error: "Invalid request." }, { status: 400 });
   }
 
-  const uid = typeof body.uid === "string" ? body.uid.trim() : "";
+  // Require a Firebase ID token — never trust a client-provided UID.
+  if (!isAdminConfigured()) {
+    return Response.json(
+      { ok: false, error: "Server authentication not configured." },
+      { status: 503 }
+    );
+  }
+
+  if (!body.token) {
+    return Response.json({ ok: false, error: "Missing authentication token." }, { status: 400 });
+  }
+
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
 
-  if (!uid || !email || !fullName) {
+  if (!email || !fullName) {
     return Response.json(
       { ok: false, error: "Missing required fields." },
       { status: 400 },
@@ -49,11 +61,19 @@ export async function POST(request: Request) {
   }
 
   try {
-    const user = await signup({
-      uid,
-      email,
-      fullName,
-    });
+    const decoded = await getAdminAuth().verifyIdToken(body.token);
+    const uid = decoded.uid;
+
+    if (decoded.email && decoded.email.toLowerCase() !== email) {
+      return Response.json(
+        { ok: false, error: "Email does not match authenticated account." },
+        { status: 400 }
+      );
+    }
+
+    const user = await signup({ uid, email, fullName });
+    await setSessionCookie(body.token);
+
     return Response.json({
       ok: true,
       user: { id: user.id, email: user.email, fullName: user.fullName },

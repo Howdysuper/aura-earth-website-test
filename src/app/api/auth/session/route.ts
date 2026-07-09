@@ -1,4 +1,5 @@
-import { setSessionCookie, setUserCookie } from "@/lib/auth";
+import { setSessionCookie, isAdminConfigured, getAdminAuth } from "@/lib/auth";
+import { getUserById } from "@/lib/firestore";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +11,29 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "Invalid request." }, { status: 400 });
   }
 
+  // Always verify the Firebase ID token server-side when Admin SDK is available.
+  // Never accept raw user data from the client body.
+  if (!isAdminConfigured()) {
+    return Response.json(
+      { ok: false, error: "Server authentication not configured." },
+      { status: 503 }
+    );
+  }
+
+  if (!body.token) {
+    return Response.json({ ok: false, error: "Missing token." }, { status: 400 });
+  }
+
   try {
-    if (body.token) {
-      await setSessionCookie(body.token);
+    const decoded = await getAdminAuth().verifyIdToken(body.token);
+    const user = await getUserById(decoded.uid);
+    if (!user) {
+      return Response.json({ ok: false, error: "User not found." }, { status: 404 });
     }
-    if (body.user) {
-      await setUserCookie(body.user);
-    }
+
+    await setSessionCookie(body.token);
     return Response.json({ ok: true });
   } catch {
-    return Response.json({ ok: false, error: "Failed to set session." }, { status: 500 });
+    return Response.json({ ok: false, error: "Invalid or expired token." }, { status: 401 });
   }
 }

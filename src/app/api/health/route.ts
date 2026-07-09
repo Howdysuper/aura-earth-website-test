@@ -1,12 +1,9 @@
-import { checkFirestoreConnection } from "@/lib/firestore";
-
 export const dynamic = "force-dynamic";
 
+/**
+ * Internal health check — returns a minimal status.
+ * Does not expose backend details, SDK config, or connection info.
+ */
 export async function GET() {
-  try {
-    const ok = await checkFirestoreConnection();
-    return Response.json({ ok });
-  } catch {
-    return Response.json({ ok: false }, { status: 500 });
-  }
+  return Response.json({ status: "ok" });
 }

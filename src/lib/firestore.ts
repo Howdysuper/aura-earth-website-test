@@ -60,6 +60,7 @@ export type User = {
   id: string;
   email: string;
   fullName: string;
+  role: string;
   createdAt: Date;
 };
 
@@ -356,7 +357,7 @@ export async function createOrder(data: {
       subtotalCents: data.subtotalCents,
       shippingCents: data.shippingCents,
       totalCents: data.totalCents,
-      status: "paid",
+      status: "pending",
       createdAt: ts(),
     });
 
@@ -405,9 +406,9 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   }
 }
 
-export async function createUser(id: string, email: string, fullName: string): Promise<User> {
-  await usersCol().doc(id).set({ email, fullName, createdAt: ts() });
-  return { id, email, fullName, createdAt: new Date() };
+export async function createUser(id: string, email: string, fullName: string, role: string = "customer"): Promise<User> {
+  await usersCol().doc(id).set({ email, fullName, role, createdAt: ts() });
+  return { id, email, fullName, role, createdAt: new Date() };
 }
 
 export async function updateUserFullName(id: string, fullName: string): Promise<void> {

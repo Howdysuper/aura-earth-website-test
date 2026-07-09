@@ -1,12 +1,15 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { isAdminConfigured, getAdminAuth } from "./firebase-admin";
+
+export { isAdminConfigured, getAdminAuth };
 import { getUserById, createUser } from "./firestore";
 
 export type AuthUser = {
   id: string;
   email: string;
   fullName: string;
+  role?: string;
   createdAt?: Date;
 };
 
@@ -29,14 +32,13 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       const decoded = await getAdminAuth().verifyIdToken(token);
       const user = await getUserById(decoded.uid);
       if (!user) return null;
-      return { id: user.id, email: user.email, fullName: user.fullName, createdAt: user.createdAt };
+      return { id: user.id, email: user.email, fullName: user.fullName, role: user.role, createdAt: user.createdAt };
     }
 
-    // No Admin SDK — read user from cookie (set by client after Firebase Auth)
-    const userJson = store.get(USER_COOKIE)?.value;
-    if (!userJson) return null;
-    const user = JSON.parse(userJson) as AuthUser;
-    return user;
+    // No Admin SDK configured — refuse to authenticate via unsigned cookies.
+    // Server-side verification is not possible without the Admin SDK.
+    // Clients must use Firebase Auth directly for authentication.
+    return null;
   } catch {
     return null;
   }
@@ -90,9 +92,9 @@ export async function signup(data: {
   try {
     const existing = await getUserById(data.uid);
     if (existing) {
-      return { id: existing.id, email: existing.email, fullName: existing.fullName, createdAt: existing.createdAt };
+      return { id: existing.id, email: existing.email, fullName: existing.fullName, role: existing.role, createdAt: existing.createdAt };
     }
-    return createUser(data.uid, data.email, data.fullName);
+    return createUser(data.uid, data.email, data.fullName, "customer");
   } catch {
     // Admin SDK not configured — return a local user object
     return { id: data.uid, email: data.email, fullName: data.fullName, createdAt: new Date() };
@@ -106,7 +108,7 @@ export async function login(uid: string): Promise<AuthUser | null> {
   try {
     const user = await getUserById(uid);
     if (!user) return null;
-    return { id: user.id, email: user.email, fullName: user.fullName, createdAt: user.createdAt };
+    return { id: user.id, email: user.email, fullName: user.fullName, role: user.role, createdAt: user.createdAt };
   } catch {
     return null;
   }
